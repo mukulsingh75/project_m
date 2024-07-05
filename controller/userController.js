@@ -5,12 +5,15 @@ import jwt from "jsonwebtoken"
 import dotenv from "dotenv";
 dotenv.config();
 
+import sendRegistrationEmail from "../services/emailServices.js";
+
 const key = process.env.SEC_KEY;
 
 const userController = {
 
     // register user
     registerUser : async(req,res)=>{
+        console.log(req.body);
 
         // validate schema
         const userSchemaValidation = Joi.object({
@@ -18,22 +21,38 @@ const userController = {
             last_name : Joi.string().required(),
             email : Joi.string().email().required(),
             phone_number : Joi.number().integer().min(0).required(),
-            address : Joi.string().required(),
+            address : Joi.string().allow(null),
             password : Joi.string().required(),
-            register_type:Joi.string().required(),
+            registration_type:Joi.string().required(),
+            role: Joi.string().allow(null),
             social_id:Joi.string().allow(null)
         });
+
+        // destruct values --
 
         const {error,value} = userSchemaValidation.validate(req.body);
 
         if(error){
             console.log(error.details);
-            res.status(400).json({success:false,message:error.details})
+            return res.status(403).json({success:false,message:error.details});
         }
 
-        const { first_name, last_name, email, phone_number, address , password , register_type , social_id} = value;
+        const { first_name, last_name, email, phone_number, address , password , registration_type , social_id} = value;
+
+        try{
+
+            // user schema set to unique:true so don't need to execute commented code
+
+        // if(registration_type==='email'){
+        //     let userExist = User.findOne({email:email});
+        // }
+        // if(userExist && userExist.status!=='unverified'){
+        //     return res.status(400).json({success:false,message:"User already exists in database"});
+        // }
 
         let hashPass = await bcrypt.hash(password,10);
+
+        let status="unverified";
 
         const formData = {
             first_name,
@@ -42,23 +61,27 @@ const userController = {
             phone_number,
             address,
             password:hashPass,
-            register_type,
-            social_id
+            registration_type,
+            social_id,
+            role:'user',
+            status
         }
         
-
-        try{
 
             let newUser = new User({...formData});
             console.log(newUser);
 
             // initially store user details in database
             let userStore = await newUser.save();
+            const jwttoken = jwt.sign({id:userStore._id},key,{expiresIn:'1d'});
+            console.log("working");
+            await sendRegistrationEmail(email, jwttoken);
 
             return res.status(200).json({success:true,userStore});
             
         }
         catch(err){
+            console.log(err);
             return res.status(500).json({success:false,err});
         }
 
@@ -90,6 +113,10 @@ const userController = {
             return;
         }
 
+        if(user.status === 'unverified'){
+            return res.status(409).json({success:false,message:"User is not verified,plaese verify it"});
+        }
+
         let response = bcrypt.compare(req.body.password,user.password);
         
         if(!response){
@@ -97,23 +124,23 @@ const userController = {
         }
 
         if(user.token){
-            return res.status(400).json({success:false,message:"user already logged-in"});
+            return res.status(406).json({success:false,message:"user already logged-in"});
         }
-
-        const jwttoken = jwt.sign({id:user._id},key,{expiresIn:'1d'});
-
         
 
         //update token in database
 
         try{
 
+            const jwttoken = jwt.sign({id:user._id},key,{expiresIn:'1d'});
+
+
             // Directly update the instance
             user.token = jwttoken;
 
             let userUpdate = await User.findByIdAndUpdate(user._id,{...user},{new:true});
 
-            res.status(200).json({success:true,message:"logged-in successfully",data:user.token});
+            res.status(200).json({success:true,message:"logged-in successfully",Data:userUpdate,token:jwttoken});
         }catch(err){
             res.status(400).json({success:false,message:"database not responding"})
         }
@@ -132,12 +159,29 @@ const userController = {
                 let userUpd = await User.findByIdAndUpdate(id,{token:null},{new:true}); 
 
                 console.log(userUpd);
-                res.status(200).json({success:true,message:"logged-out successfully",data:userUpd});
+                return res.status(200).json({success:true,message:"logged-out successfully",data:userUpd});
             } catch (error) {
-                res.status(400).json({success:false,message:"some error occured"});
+                return res.status(500).json({success:false,message:"some error occured"});
             }
     },
 
+    // verify user
+    verifyuser: async(req,res)=>{
+
+    }
+    ,
+
+    // resend verification mail
+
+    resendMail:async(req,res)=>{
+        console.log(req.body);
+        try {
+            let userFound = User.findOne({email:req.body.email});
+        } catch (error) {
+            
+        }
+    }
+    ,
     // force login 
     forceLogin : async(req,res)=>{
         try {
@@ -153,7 +197,7 @@ const userController = {
             const pass = req.body.password;
             const passOk = bcrypt.compare(pass,userFind.password);
             if(!passOk){
-                res.status(200).json({success:false,message:"invalid credentials"});
+                return res.status(200).json({success:false,message:"invalid credentials"});
             }
             
 
@@ -168,10 +212,10 @@ const userController = {
 
             // update token with new one
             const userUpdate = await User.findOneAndUpdate({email:email},{...userFind},{new:true});
-            res.status(200).json({success:true,message:"you are logged in forcefully",data:userUpdate});
+            return res.status(200).json({success:true,message:"you are logged in forcefully",data:userUpdate});
 
         } catch (error) {
-            res.status(400).json({success:true,message:"Some error occured"});
+            return res.status(400).json({success:true,message:"Some error occured"});
         }
     }
     ,

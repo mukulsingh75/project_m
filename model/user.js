@@ -26,7 +26,7 @@ const userSchema = new schema({
     },
     address : {
         type : String,
-        required:true
+        default:null
     },
     password : {
         type: String,
@@ -36,9 +36,18 @@ const userSchema = new schema({
         type:String,
         default:null
     },
-    register_type:{
+    registration_type:{
         type:String,
         default:"email"
+    },
+    role:{
+        type:String,
+        required:true
+    },
+    status:{
+        type:String,
+        enum:["verified","unverified","active","inactive","deleted"],
+        default:"unverified"
     },
     social_id:{
         type:String,

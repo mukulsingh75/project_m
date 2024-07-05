@@ -8,7 +8,11 @@ router.post("/register",userController.registerUser);
 
 router.post("/login",userController.loginUser);
 
-router.post("/logout",verifyToken,userController.logoutUser);
+router.post("/verify",verifyToken,userController.verifyuser);
+
+router.post("/resendVerify",userController.resendMail);
+
+router.get("/logoutuser",verifyToken,userController.logoutUser);
 
 router.post("/forcelogin",userController.forceLogin);
 
