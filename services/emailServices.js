@@ -5,7 +5,7 @@ dotenv.config();
 
 const sendRegistrationEmail = (email, token) => {
     return new Promise((resolve, reject) => {
-        const verifyEmailUrl = `${process.env.FRONTEND_URL}/verify?token=${token}`;
+        const verifyEmailUrl = `${process.env.FRONT_END_URL}/verify?token=${token}`;
         const resisterUserTemplate = getResisterUserTemplate(verifyEmailUrl);
         const mailOptions = {
             from: process.env.EMAIL_USER,

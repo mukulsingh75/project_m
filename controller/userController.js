@@ -77,12 +77,12 @@ const userController = {
             console.log("working");
             await sendRegistrationEmail(email, jwttoken);
 
-            return res.status(200).json({success:true,userStore});
+            return res.status(200).json({success:true,message:"User-registered successfully",userStore});
             
         }
         catch(err){
             console.log(err);
-            return res.status(500).json({success:false,err});
+            return res.status(500).json({success:false,message:err.message,err});
         }
 
     }
@@ -124,7 +124,7 @@ const userController = {
         }
 
         if(user.token){
-            return res.status(406).json({success:false,message:"user already logged-in"});
+            return res.status(406).json({success:false,message:"User already logged-in"});
         }
         
 
@@ -153,7 +153,7 @@ const userController = {
             // code here
             try {
                 const id = req.body.userId;
-                // console.log(id);
+                console.log("id  :  ",id);
 
                 // update token to null
                 let userUpd = await User.findByIdAndUpdate(id,{token:null},{new:true}); 
@@ -161,24 +161,60 @@ const userController = {
                 console.log(userUpd);
                 return res.status(200).json({success:true,message:"logged-out successfully",data:userUpd});
             } catch (error) {
-                return res.status(500).json({success:false,message:"some error occured"});
+                return res.status(500).json({success:false,message:"some error occured in logout"});
             }
     },
 
     // verify user
     verifyuser: async(req,res)=>{
-
+        try {
+            console.log("id:  "+req.body.userId);
+            let updated = await User.findByIdAndUpdate(req.body.userId,{status:'verified'},{new:true});
+            console.log(updated);
+            if(updated){
+                return res.status(200).json({success:true,message:'User-Account verified successfully',data:updated});
+            }
+        } catch (error) {
+            return res.status(404).json({success:false,message:"user not verified",error});
+        }
     }
     ,
 
     // resend verification mail
 
     resendMail:async(req,res)=>{
-        console.log(req.body);
+        console.log("resend mail",req.body);
         try {
-            let userFound = User.findOne({email:req.body.email});
-        } catch (error) {
+
+            // for email login
+            if(req.body.email){
+                let userFound = await User.findOne({email:req.body.email});
+                console.log(userFound);
+                if(userFound && userFound.status==='unverified'){
+                    let token = jwt.sign({id:userFound._id},key,{expiresIn:'1d'});
+                    console.log(token);
+                    const response = await sendRegistrationEmail(userFound.email,token);
+                    return res.status(200).json(response);
+                }
+                else if(userFound.status==='verified'){
+                    return res.status(400).json({success:false,message:"user is already verified"});
+                }
+            }
+
+            // for google login
+            if(req.body.registration_type==='google'){
+                let soId = req.body.social_id;
+                let userFound = await User.findOne({social_id:soId});
+
+                let token = jwt.sign({id:userFound._id},key,{expiresIn:'1d'});
+
+                const response = await sendRegistrationEmail(userFound.email,token);
+                return res.status(200).json(response);
+            }
             
+            
+        } catch (error) {
+            return res.status(500).json({success:false,message:"some error occured",error});
         }
     }
     ,
@@ -223,20 +259,60 @@ const userController = {
     // social login
 
     socialLogin : async(req,res)=>{
+        console.log("social login  : ",req.body);
 
-        const registrationValidation = Joi.object({
-            social_id : Joi.string().required(),
-            register_type : Joi.string().valid("google","facebook").required()
-        });  
+        try {
+            const registrationValidation = Joi.object({
+                social_id : Joi.string().required(),
+                registration_type : Joi.string().valid("google","facebook").required()
+            });  
+    
+            // validation
+            const {error,value} = registrationValidation.validate(req.body);
+    
+            if(error){
+                res.status(400).json({success:false,message:"Invalid credentials"});
+            };
+    
+            const {social_id,register_type} = value;
 
-        // validation
-        const {error,value} = registrationValidation.validate(req.body);
+            let userFound = await User.findOne({social_id});
 
-        if(error){
-            res.status(400).json({success:false,message:"Invalid credentials"});
-        };
+            // console.log(userFound);
 
-        const {social_id,register_type} = value;
+            if(userFound.status === 'unverified'){
+                return res.status(409).json({success:false,message:"User is not verified,please verify it"});
+            };
+
+            if(userFound.token){
+                return res.status(406).json({success:false,message:"user already logged-in"});
+            };
+
+            let id = userFound._id;
+
+            const token = jwt.sign({userId:id},key,{expiresIn:'1d'});
+
+            let userUpd = await User.findByIdAndUpdate(id,{token:token});
+
+            return res.status(200).json({success:true,message:'You are logged in successfully',
+                                        Data: {
+                                            id: userUpd.id,
+                                            first_name: userUpd.first_name,
+                                            last_name: userUpd.last_name,
+                                            email: userUpd.email,
+                                            phone_number: userUpd.phone_number,
+                                            status: userUpd.status,
+                                            registration_type: userUpd.registration_type,
+                                            social_id: userUpd.social_id,
+                                            role: userUpd.role
+                                        },token});
+            
+
+        } catch (error) {
+            return res.status(500).json({success:false,message:"User not found"});
+        }
+
+        
 
 
 

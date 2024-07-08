@@ -36,5 +36,5 @@ const sslOptions = {
 var httpsServer = https.createServer(sslOptions, app);
 
 httpsServer.listen(port_no, () => {
-  console.log(`Server is running on port: ${port_no}`);
+  console.log(`Server is running on port: ${port_no} and url is https://localhost:4000`);
 });
